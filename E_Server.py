@@ -1,12 +1,6 @@
 import sys
-from multiprocessing import Lock
 from Handlers import MyHTTPHandler, MySSHHandler
 from Tools import RequestManager, ServJob
-
-
-lockH = Lock()  #La semaphore sur la ressource BUFFER_HTTP_TO_SHH
-lockS = Lock()  #La semaphore sur la ressource BUFFER_SSH_TO_HTTP
- 
 
 def usage():
     """
