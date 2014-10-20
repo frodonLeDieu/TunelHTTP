@@ -1,6 +1,6 @@
 import sys
 from Handlers import MyHTTPHandler, MySSHHandler
-from Tools import RequestManager, ServJob
+from Tools import RequestManager, ServJob, SockListenerJob
 
 def usage():
     """
@@ -22,7 +22,7 @@ def main():
     
 
     http = ServJob('HTTPServer', PORT, MyHTTPHandler)
-    ssh = ServJob('SSHServer', PORT2, MySSHHandler, 'Listening')
+    ssh = SockListenerJob('SSHServer', PORT2, MySSHHandler.handle_E, 'Listening')
 
     http.start()
     ssh.start()

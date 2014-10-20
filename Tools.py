@@ -1,4 +1,6 @@
 import time
+import select
+import socket
 import base64
 import paramiko
 import urllib2
@@ -17,7 +19,9 @@ class RequestManager :
 
     E_isReady = False
     W_isReady = False
+
     W_still_Writing = False
+    E_can_Read = False
     
     oK = 'OK'
     kO = 'KO'
@@ -26,7 +30,8 @@ class RequestManager :
     HTML_SUFFIX = '</p></html>'
 
     EOT = 'DEADBEEF'
-    MAX_SIZE = 255
+    MAX_SIZE_GET = 255
+    MAX_SIZE_PAGE = 2048
     
     BUFFER_SSH_TO_HTTP = ''
     BUFFER_HTTP_TO_SSH = ''
@@ -143,53 +148,21 @@ class RequestManager :
 
 
 
-
-
-
 class W_Slave(threading.Thread): 
     """
     ----------------------------------------------
-    Help us to launch W-P html interractions as a Job
+    Help us to launch W-P html interractions and ssh things as a Job
     ----------------------------------------------
     """
-
-    def __init__(self, nom, action='Running'):
+    def __init__(self, nom, handler, action='Running'):
         threading.Thread.__init__(self) 
         self.nom = nom 
         self.action = action
-
+        self.handler = handler
 
     def run(self):
         print time.asctime(), ' ::: '+self.action+' '+self.nom.__str__()+' to reach '+W_Bot.BASE_URL+'....'
-        try:
-            W_Bot.beSlaveForEver()
-        except KeyboardInterrupt:
-            print "Interrupt"
-        print time.asctime()
-
-
-
-
-class W_Master(threading.Thread): 
-    """
-    ----------------------------------------------
-    Help us to open SSH connection on W and execute commands and get their results
-    ----------------------------------------------
-    """
-
-    def __init__(self, nom, action='Running'):
-        threading.Thread.__init__(self) 
-        self.nom = nom 
-        self.action = action
-
-
-    def run(self):
-        print time.asctime(), ' ::: '+self.action+' '+self.nom.__str__()+'waiting....'
-        try:
-            W_Bot.beSlaveForEver()
-        except KeyboardInterrupt:
-            print "Interrupt"
-            
+        self.handler()
         print time.asctime()
 
 
@@ -204,6 +177,7 @@ class W_Bot:
     SSH_CLIENT = ''
     TIME_TO_WAIT = 5
     BASE_URL = ''
+    PORT = 22
 
     @staticmethod
     def beSlaveForEver():
@@ -217,25 +191,28 @@ class W_Bot:
                 print "E is not Ready"
                 W_Bot.checkE_Ready()
             # Quand E est pret et que la connexion en SSH de W n'est pas encore ouverte on l'ouvre
-            if RequestManager.E_isReady and not RequestManager.W_isReady:
+            if RequestManager.E_isReady:
                 print "E is ready"
-                W_Bot.openSSH()
+                #W_Bot.openSSH()
                 print "SSH OPENED on W"
-
+                RequestManager.W_isReady = True
             # Quand E et W sont prets en SSH on peut commencer la communication
             if RequestManager.doesW_WaitingOrder():
                 print "E is ready on SSH, W too"
-                command = W_Bot.askCommand()
+                data = W_Bot.askData()
 
-                # Redemander la commande tant qu'on en a pas recu
-                while command == RequestManager.kO:
+                # Redemander le paquet tant qu'on en a pas recu un correct
+                while data == RequestManager.kO:
                     W_Bot.sleep()
-                    command = W_Bot.askCommand()
+                    data = W_Bot.askData()
                 #E est aussi pret ET a envoye une commande
-                if command != RequestManager.kO:                   
-                    #On execute la commande et on renvoie le resultat a E
-                    result = W_Bot.execute(command)
-                    list_result = RequestManager.formatResult(result)
+                if data != RequestManager.kO:                   
+                    #On ecrit notre data sur W_SSH
+                    lockH.acquire()
+                    RequestManager.BUFFER_HTTP_TO_SSH = data
+                    lockH.release()
+                    #result = W_Bot.execute(command)
+                    list_result = RequestManager.formatResult(data)
                     for string in list_result:
                         print "==> "+string
                         code = base64.b64encode(string)
@@ -245,8 +222,8 @@ class W_Bot:
 
                     url = W_Bot.BASE_URL+RequestManager.url_set_W_HaveResult+'?'+RequestManager.response+'='+RequestManager.EOT
                     state = RequestManager.request(url)
-
                     exit(0)
+
 
 
     @staticmethod
@@ -267,11 +244,12 @@ class W_Bot:
     def openSSH():
         """
         Open an SSH connection on W localhost
-        """
         W_Bot.SSH_CLIENT = paramiko.SSHClient()
         W_Bot.SSH_CLIENT.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        W_Bot.SSH_CLIENT.connect('127.0.0.1', username='doc', 
+        W_Bot.SSH_CLIENT.connect('127.0.0.1', username='localuser', 
             password='0irakboss')
+        """
+        
         RequestManager.W_isReady = True
 
 
@@ -303,7 +281,7 @@ class W_Bot:
 
 
     @staticmethod
-    def askCommand():
+    def askData():
         """
         Ask a command to E
         """
@@ -318,6 +296,27 @@ class ServJob(threading.Thread):
     Help us to launch Servers threads on E machine
     ----------------------------------------------
     """
+    def __init__(self, nom, port, handler, action='Running'):
+        threading.Thread.__init__(self) 
+        self.nom = nom 
+        self.port = port
+        self.handler = handler
+        self.action = action
+
+    def run(self):
+        print time.asctime(), ' ::: '+self.action+' '+self.nom.__str__()+' at port '+self.port.__str__()+' ......'
+        serv = SocketServer.TCPServer(('', self.port), self.handler)
+        serv.serve_forever()
+        print time.asctime()
+
+
+
+class SockListenerJob(threading.Thread): 
+    """
+    ----------------------------------------------
+    Help us to listen on a socket
+    ----------------------------------------------
+    """
 
     def __init__(self, nom, port, handler, action='Running'):
         threading.Thread.__init__(self) 
@@ -326,15 +325,16 @@ class ServJob(threading.Thread):
         self.handler = handler
         self.action = action
 
-
     def run(self):
+        # Create a TCP/IP socket
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setblocking(0)
+        # Bind the socket to the port
+        server_address = ('localhost', self.port)
+        server.bind(server_address)
         print time.asctime(), ' ::: '+self.action+' '+self.nom.__str__()+' at port '+self.port.__str__()+' ......'
-        serv = SocketServer.TCPServer(('', self.port), self.handler)
-        try:
-            serv.serve_forever()
-        except KeyboardInterrupt:
-            print "Interrupt"
-            serv.server_close()
-            
-        serv.server_close()
-        print time.asctime()
+        # Sockets from which we expect to read
+        inputs = [ server ]
+        outputs = [ ]
+        self.handler(inputs, outputs, server)
+        print "End at",time.asctime()
