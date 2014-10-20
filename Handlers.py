@@ -153,7 +153,8 @@ class MySSHHandler():
                         lockS.release()
                         print "Data => "+data
                         while not RequestManager.E_can_Read:
-                            break
+                            time.sleep(0.5)
+                        print "E peut peut lire sur BUFFER_HTTP_TO_SSH"
                         # Si E peut lire BUFFER_HTTP_TO_SSH
                         if RequestManager.E_can_Read:
                             lockH.acquire()

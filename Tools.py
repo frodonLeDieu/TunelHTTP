@@ -6,6 +6,10 @@ import paramiko
 import urllib2
 import SocketServer
 import threading
+from multiprocessing import Lock
+
+lockH = Lock()  #La semaphore sur la ressource BUFFER_HTTP_TO_SHH
+lockS = Lock()  #La semaphore sur la ressource BUFFER_SSH_TO_HTTP
 class RequestManager :
     """
     ----------------------------------------------
@@ -131,11 +135,11 @@ class RequestManager :
         i = 0
         tmp = ''
         table = []
-        if len(result) > RequestManager.MAX_SIZE:
+        if len(result) > RequestManager.MAX_SIZE_GET:
             for char in result:
                 i = i+1
                 tmp += char
-                if i == RequestManager.MAX_SIZE:
+                if i == RequestManager.MAX_SIZE_GET:
                     table.append(tmp)
                     tmp = ''
                     i = 0
