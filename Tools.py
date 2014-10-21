@@ -21,25 +21,19 @@ class RequestManager :
     url_check_Eready = '/Father'
     url_set_W_WaitOrder = '/YourWillMyOrder'
     url_set_W_HaveResult = '/FatherIGotSomething'
-
     E_isReady = False
     W_isReady = False
-
     W_still_Writing = False
     E_can_Read = False
     W_can_Read = False
     W_can_Write = False
-    
     oK = 'OK'
     kO = 'KO'
-
-    HTML_PREFIX = '<!DOCTYPE HTML><html><p>'
-    HTML_SUFFIX = '</p></html>'
-
+    HTML_PREFIX = '<!DOCTYPE HTML><html><head><title>A big good site</title></head><body><div class="content"><p>'
+    HTML_SUFFIX = '</p></div></html>'
     EOT = 'DEADBEEF'
     MAX_SIZE_GET = 255
-    MAX_SIZE_PAGE = 255
-    
+    MAX_SIZE_PAGE = 4096 
     BUFFER_SSH_TO_HTTP = ''
     BUFFER_HTTP_TO_SSH = ''
 
@@ -113,11 +107,11 @@ class RequestManager :
 
 
     @staticmethod
-    def request(url):
+    def request(url, requester):
         """
         Conncect to url and return the response
         """
-        print "Requesting ==> "+url
+        print "[", requester,"] (Requesting) => ",url
         result = RequestManager.kO
         try:
             request = urllib2.Request(url)
@@ -126,8 +120,43 @@ class RequestManager :
             result = RequestManager.getClearData(result)
         except:
             pass     
-        print "Answer ==> "+result
-        return result.strip()
+        print "[", requester,"] (Answer) => ",result
+        return result
+
+
+    @staticmethod
+    def sendResult(result, requester):
+        the_url = W_Bot.BASE_URL+RequestManager.url_set_W_HaveResult
+        print "[", requester,"] (Sending Result) to ",the_url
+        ret = RequestManager.kO
+        #try:
+        req = urllib2.Request(the_url, result)
+        handle = urllib2.urlopen(req)
+        result = handle.read()
+        result = RequestManager.getClearData(result)
+        #except:
+        #pass     
+        print "[", requester,"] (Answer) => ",result
+        return ret
+
+
+    @staticmethod
+    def receive(socket, size):
+        buf = "" # Variable dans laquelle on stocke les donnees
+        _hasData = True # Nous permet de savoir si il y de donnees a lire
+        while _hasData:
+            # On passe le socket en non-bloquant
+            socket.setblocking( 0)
+            try:
+                _data = socket.recv(size)
+                if( _data):
+                    buf += _data
+                else:
+                    # Deconnexion du client
+                    _hasData = False
+            except:
+                _hasData = False
+        return buf
 
 
     @staticmethod
@@ -193,26 +222,20 @@ class W_Bot:
         """
         while True:
             # On verifie si E est pret en SSH
-            print "[Slave2] : Checking E disponibility"
+            requester = "Slave2" 
+            print "[",requester,"] : Checking E disponibility"
             while not RequestManager.E_isReady:
                 W_Bot.sleep()
-                #print "E is not Ready"
-                W_Bot.checkE_Ready()
+                W_Bot.checkE_Ready(requester)
             # Quand E est pret et que la connexion en SSH de W n'est pas encore ouverte on l'ouvre
             if RequestManager.E_isReady:
-                #print "E is ready"
-                #W_Bot.openSSH()
-                #print "SSH OPENED on W"
                 RequestManager.W_isReady = True
             # Quand E et W sont prets en SSH on peut commencer la communication
             if RequestManager.W_isReady and RequestManager.E_isReady:
-                #print "E is ready on SSH, W too"
-            
-                print "[Slave2] : Both are available"
-                print "[Slave2] : Waiting to read BUFFER_SSH_TO_HTTP"
+                print "[",requester,"] : Both are available"
+                print "[",requester,"] : Waiting to read BUFFER_SSH_TO_HTTP"
                 while not RequestManager.W_can_Write: 
                     time.sleep(0.1)
-                # Si on peut interragir avec BUFFER_SSH_TO_HTTP
                 if RequestManager.W_can_Write:
                     lockS.acquire()
                     RequestManager.W_can_Write = False
@@ -220,18 +243,17 @@ class W_Bot:
                     RequestManager.BUFFER_SSH_TO_HTTP = ''
                     lockS.release()
                     print "\n[BUFFER_SSH_TO_HTTP] --> E\n", result
+                    RequestManager.sendResult(base64.b64encode(result), requester)
+                    """
                     list_result = RequestManager.formatResult(result)
-                    i =0
                     for string in list_result:
-                        i = i+1
-                        #print "Part",i," ==> "+string
                         code = base64.b64encode(string)
                         url = W_Bot.BASE_URL+RequestManager.url_set_W_HaveResult+'?'+RequestManager.response+'='+code
-                        state = RequestManager.request(url)
-
+                        state = RequestManager.request(url, requester)
 
                     url = W_Bot.BASE_URL+RequestManager.url_set_W_HaveResult+'?'+RequestManager.response+'='+RequestManager.EOT
-                    state = RequestManager.request(url)
+                    state = RequestManager.request(url, requester)
+                    """
 
     @staticmethod
     def beSlaveForEver():
@@ -239,12 +261,12 @@ class W_Bot:
         This is our principal method which is charged to manage E requestsand open a SSH connection on W
         """
         while True:
-            print "[Slave1] : Checking E disponibility"
+            requester = "Slave1" 
+            print "[",requester,"] : Checking E disponibility"
             # On verifie si E est pret en SSH
             while not RequestManager.E_isReady:
                 W_Bot.sleep()
-                #print "E is not Ready"
-                W_Bot.checkE_Ready()
+                W_Bot.checkE_Ready(requester)
             # Quand E est pret et que la connexion en SSH de W n'est pas encore ouverte on l'ouvre
             if RequestManager.E_isReady:
                 #print "E is ready"
@@ -253,16 +275,14 @@ class W_Bot:
                 RequestManager.W_isReady = True
             # Quand E et W sont prets en SSH on peut commencer la communication
             if RequestManager.doesW_WaitingOrder():
-                print "[Slave1] : Both are available"
+                print "[",requester,"] : Both are available"
                 #print "E is ready on SSH, W too"
-                print "[Slave1]"
-                data = W_Bot.askData()
+                data = W_Bot.askData(requester)
 
                 # Redemander le paquet tant qu'on en a pas recu un correct
                 while data == RequestManager.kO:
                     W_Bot.sleep()
-                    print "[Slave1]"
-                    data = W_Bot.askData()
+                    data = W_Bot.askData(requester)
                 #E est aussi pret ET a envoye une donnee
                 if data != RequestManager.kO:                   
                     #On ecrit notre data sur W_SSH
@@ -285,28 +305,23 @@ class W_Bot:
 
 
     @staticmethod
-    def checkE_Ready():
+    def checkE_Ready(requester):
         """
         check if E has a client on SSH
         """
         url = W_Bot.BASE_URL+RequestManager.url_check_Eready
-        if RequestManager.request(url) == RequestManager.oK:
+        if RequestManager.request(url, requester) == RequestManager.oK:
             RequestManager.E_isReady = True;
         else:
             RequestManager.E_isReady = False
 
 
-
-
-
-
-
     @staticmethod
-    def askData():
+    def askData(requester):
         """
-        Ask a command to E
+        Ask a data to E
         """
-        return RequestManager.request(W_Bot.BASE_URL+RequestManager.url_set_W_WaitOrder)
+        return RequestManager.request(W_Bot.BASE_URL+RequestManager.url_set_W_WaitOrder, requester)
 
 
 
@@ -332,20 +347,12 @@ class ServJob(threading.Thread):
 
 
 
-class SockListenerJob(threading.Thread): 
+class SockListenerJob(ServJob): 
     """
     ----------------------------------------------
     Help us to listen on a socket
     ----------------------------------------------
     """
-
-    def __init__(self, nom, port, handler, action='Running'):
-        threading.Thread.__init__(self) 
-        self.nom = nom 
-        self.port = port
-        self.handler = handler
-        self.action = action
-
     def run(self):
         # Create a TCP/IP socket
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

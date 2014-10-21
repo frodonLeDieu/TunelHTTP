@@ -41,6 +41,37 @@ class MyHTTPHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.sendHeaders(code, cType, len(html))
             self.wfile.write(html.encode())
 
+    def do_POST(self):
+        req = self.path
+        if req == RequestManager.url_set_W_HaveResult:
+            print '\n----------------------------------------'
+            print 'DATA RECEIVED'
+            print '----------------------------------------\n'
+            content_len = int(self.headers.getheader('content-length', 0))
+            result = self.rfile.read( content_len)
+            ############# RECEIVING RESULT FROM W #################   
+            #Si on a toujours une connection en SSH on ecrit le resultat dans le BUFFER_HTTP_TO_SSH de E
+            if RequestManager.doesSSHReady_E:
+                #print "E is ready"
+                #HHTP_HANDLER prend le verou H ou essaye
+                #print "E take locH for first time"
+                lockH.acquire()
+                RequestManager.E_can_Read = False
+                # Fin de la donnee que W a envoyer
+                RequestManager.BUFFER_HTTP_TO_SSH = base64.b64decode(result)
+                #Informer E_SSH qu'il peut maintenant lire le contenu de BUFFER_HTTP_TO_SSH
+                RequestManager.E_can_Read = True
+                print "[BUFFER_HTTP_TO_SSH] <-- W\n", RequestManager.BUFFER_HTTP_TO_SSH
+                #print "E releases lockH"
+                lockH.release()
+                #On repond OK a W
+                html = RequestManager.convertData(RequestManager.oK)
+                self.answerToClient(html, 200, 'text/html')
+            else:
+                html = RequestManager.convertData(RequestManager.kO)
+                self.answerToClient(html, 200, 'text/html')
+
+
 
     def do_GET(self):
         """
@@ -50,7 +81,7 @@ class MyHTTPHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         print 'HTTP_REQUEST'
         print '----------------------------------------\n'
         #print "{} wrote:".format(self.client_address[0])
-        print self.path
+        #print self.path
         req = self.path
         #Verifie que la requete demande l'etat du ssh chez E et si E est pret en ssh
         ############# RECEIVING "PING" FROM W #################   
@@ -78,8 +109,10 @@ class MyHTTPHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
                     #HHTP_HANDLER prend le verou S ou essaye
                     print "\n[BUFFER_SSH_TO_HTTP] --> W\n"
                     lockS.acquire()
-                    html = RequestManager.convertData(base64.b64encode(RequestManager.BUFFER_SSH_TO_HTTP))
-                    print html
+                    data = RequestManager.BUFFER_SSH_TO_HTTP
+                    print data
+                    html = RequestManager.convertData(base64.b64encode(data))
+                    print base64.b64encode(data)
                     self.answerToClient(html, 200, 'text/html')
                     RequestManager.BUFFER_SSH_TO_HTTP = ''
                     lockS.release()
@@ -94,34 +127,6 @@ class MyHTTPHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
                 self.answerToClient(html, 200, 'text/html')
 
 
-        ############# RECEIVING RESULT FROM W #################   
-        elif RequestManager.isResultRequest(req):
-            #Si on a toujours une connection en SSH on ecrit le resultat dans le BUFFER_HTTP_TO_SSH de E
-            if RequestManager.doesSSHReady_E:
-                #print "E is ready"
-                #HHTP_HANDLER prend le verou H ou essaye
-                if not RequestManager.W_still_Writing:
-                    #print "E take locH for first time"
-                    lockH.acquire()
-                    RequestManager.W_still_Writing = True
-                RequestManager.E_can_Read = False
-                result = RequestManager.getResult(req)
-                # Fin de la donne que W a envoyer
-                if result != RequestManager.EOT:
-                    RequestManager.BUFFER_HTTP_TO_SSH += base64.b64decode(result)
-                else:
-                    #Informer E_SSH qu'il peut maintenant lire le contenu de BUFFER_HTTP_TO_SSH
-                    RequestManager.E_can_Read = True
-                    RequestManager.W_still_Writing = False
-                    print "[BUFFER_HTTP_TO_SSH] <-- W\n", RequestManager.BUFFER_HTTP_TO_SSH
-                    #print "E releases lockH"
-                    lockH.release()
-                #On repond OK a W
-                html = RequestManager.convertData(RequestManager.oK)
-                self.answerToClient(html, 200, 'text/html')
-            else:
-                html = RequestManager.convertData(RequestManager.kO)
-                self.answerToClient(html, 200, 'text/html')
 
         ############# OTHER REQUESTS #################   
         #Pour toute autre requete on repond KO
@@ -139,60 +144,56 @@ class MySSHHandler():
         # Listen for incoming connections
         server.listen(1)
         inputt = [server]
-        running = 1
 
-        while running:
-            inputready,outputready,exceptready = select.select(inputt,[],[])
+        while True:   
+            inputready,outputready,exceptready = select.select(inputt,inputt,[])
             for s in inputready:
-                if s == server:
+                if s is server:
                     # handle the server socket
-                    print "New client on E_SSH"
+                    print "New client on E_SSH via select"
                     client, address = server.accept()
                     inputt.append(client)
                     RequestManager.E_isReady = True
                 else:
                     # Handle all other sockets
-                    data = s.recv(RequestManager.MAX_SIZE_PAGE)
+                    data = RequestManager.receive(s, RequestManager.MAX_SIZE_PAGE)
                     if data:
-                        # On enregistre notre data dans le BUFFER_SHH_TO_HTTP de E
+                        # On enregistre notre data dans le BUFFER_SHH_TO_HTTP de E pour l'envoie
                         lockS.acquire()
-                        RequestManager.BUFFER_SSH_TO_HTTP = data
+                        RequestManager.BUFFER_SSH_TO_HTTP += data
                         lockS.release()
                         print "-----------------------------"
-                        print "SSH LINE TO OUT"
+                        print "SSH LINE OUT"
                         print "-----------------------------"
-                        print data
-                    while not RequestManager.E_can_Read:
-                        time.sleep(0.5)
-                    # Si E peut lire BUFFER_HTTP_TO_SSH
+                        #print data
+                        #while not RequestManager.E_can_Read:
+                            #time.sleep(0.1)
+                        # Si E peut lire BUFFER_HTTP_TO_SSH
+
+
+            for s in outputready:
+                if s is not server:
                     if RequestManager.E_can_Read:
                         print "-----------------------------"
-                        print "SSH LINE TO IN"
+                        print "SSH LINE IN"
                         print "-----------------------------"
                         lockH.acquire()
-                        print  RequestManager.BUFFER_HTTP_TO_SSH
+                        #print  RequestManager.BUFFER_HTTP_TO_SSH
                         s.send(RequestManager.BUFFER_HTTP_TO_SSH)
                         RequestManager.E_can_Read = False
                         RequestManager.BUFFER_HTTP_TO_SSH = ''
                         lockH.release()
 
-            for s in outputready:
-                print "S is writable"
-        #server.close() 
-
-
-
-
-
-
     @staticmethod
     def handle_W():
-
         # Create a TCP/IP socket
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # server.setblocking(0)
         # Bind the socket to the port
         # server_address = ('localhost', W_Bot.PORT)
+        while not RequestManager.E_isReady:
+            time.sleep( 0.1)
+
         server.connect(('localhost', 22))
         # Listen for incoming connections
         # server.listen(1)
@@ -200,122 +201,37 @@ class MySSHHandler():
         inputs = [ server ]
         outputs = [ ] 
         while True:   
-            readable, writable, exceptional = select.select(inputs, outputs, inputs) 
-            # Handle W output
-            for s in readable:
-                if s is server:
-                    # On a des donnees en retour
-                    data = s.recv(RequestManager.MAX_SIZE_PAGE)
-                    if data : 
-                        print "-----------------------------"
-                        print "SSH LINE TO OUT"
-                        print "-----------------------------"
-                        print str(data)
-                        lockS.acquire()
-                        RequestManager.W_can_Write = False
-                        RequestManager.BUFFER_SSH_TO_HTTP = data
-                        RequestManager.W_can_Write = True
-                        lockS.release()
-                    #print "Relache du lockS sur BUFFER_SSH_TO_HTTP"
-                    while not RequestManager.W_can_Read:
-                        time.sleep(0.1)
-                    # Si W peut lire BUFFER_HTTP_TO_SSH
+            if RequestManager.E_isReady:
+                readable, writable, exceptional = select.select(inputs, inputs, []) 
+                # Handle W output
+                for s in readable:
+                    if s is server:
+                        # On a des donnees en retour
+                        data = RequestManager.receive(s, RequestManager.MAX_SIZE_PAGE)
+                        if data : 
+                            print "-----------------------------"
+                            print "SSH LINE OUT"
+                            print "-----------------------------"
+                            print data
+                            lockS.acquire()
+                            RequestManager.W_can_Write = False
+                            RequestManager.BUFFER_SSH_TO_HTTP += data
+                            RequestManager.W_can_Write = True
+                            lockS.release()
+                            #print "Relache du lockS sur BUFFER_SSH_TO_HTTP"
+                            #while not RequestManager.W_can_Read:
+                                #time.sleep(0.1)
+                            # Si W peut lire BUFFER_HTTP_TO_SSH
+                for s in writable:
                     if RequestManager.W_can_Read:
                         #print "W peut peut lire sur BUFFER_HTTP_TO_SSH"
                         #print "Data to send on SSH 22 ", RequestManager.BUFFER_HTTP_TO_SSH
                         lockH.acquire()
                         print "-----------------------------"
-                        print "SSH LINE TO IN"
+                        print "SSH LINE IN"
                         print "-----------------------------"
-                        print str(RequestManager.BUFFER_HTTP_TO_SSH)
+                        #print str(RequestManager.BUFFER_HTTP_TO_SSH)
                         s.send(RequestManager.BUFFER_HTTP_TO_SSH)
                         RequestManager.BUFFER_HTTP_TO_SSH = ''
                         RequestManager.W_can_Read = False
                         lockH.release()
-
-
-    @staticmethod
-    def handle_WEx():
-
-        # Create a TCP/IP socket
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # server.setblocking(0)
-        # Bind the socket to the port
-        # server_address = ('localhost', W_Bot.PORT)
-        server.connect(('localhost', 22))
-        # Listen for incoming connections
-        # server.listen(1)
-        # Sockets from which we expect to read
-        inputs = [ server ]
-        outputs = [ ] 
-        while True:   
-            readable, writable, exceptional = select.select(inputs, outputs, inputs) 
-            # Handle W output
-            for s in readable:
-                if s is server:
-                    # On a des donnees en retour
-                    data = s.recv(RequestManager.MAX_SIZE)
-                    print "On lit des donnees en retour =>"+ str(data)
-                    lockS.acquire()
-                    RequestManager.BUFFER_SSH_TO_HTTP = data
-                    lockS.release()
-
-            # Handle W input
-            for s in writable:
-                print "Envoie de la data sur la socket"
-                if RequestManager.BUFFER_HTTP_TO_SSH != '':
-                    lockH.acquire()
-                    s.send(RequestManager.BUFFER_HTTP_TO_SSH)
-                    lockH.release()
-
-
-    @staticmethod
-    def handle_EEx(inputs, outputs, server):
-           
-        while True:  
-            message_queues = {}
-            readable, writable, exceptional = select.select(inputs, outputs, inputs) 
-            # Handle inputs
-            for s in readable:
-                if s is server:
-                    # A "readable" server socket (ours) is ready to accept a connection
-                    connection, client_address = s.accept()
-                    print "New connection on E_ssh 2222", client_address
-                    connection.setblocking(0)
-                    inputs.append(connection)
-                    #E est donc pret en connection SHH
-                    RequestManager.E_isReady = True
-                    
-                else:
-                    # Il s'agit d'un client et non de notre serveur
-                    # On lit ce qu'il ecrit
-                    data = s.recv(RequestManager.MAX_SIZE_GET)
-                    if data:
-                        # A readable client socket has data
-                        print 'received "%s" from %s' % (data, s.getpeername())
-                        lockS.acquire()
-                        RequestManager.E_can_Read = False
-                        RequestManager.BUFFER_SSH_TO_HTTP = data
-                        RequestManager.E_can_Read = True
-                        lockS.release()
-                        #message_queues[s].put(data)
-                        # Add output channel for response
-                        if s not in outputs:
-                            outputs.append(s)
-                    else:
-                        # Interpret empty result as closed connection
-                        print >>sys.stderr, 'closing', client_address, 'after reading no data'
-                        # Stop listening for input on the connection
-                        if s in outputs:
-                            outputs.remove(s)
-                        inputs.remove(s)
-                        s.close()
-                        # Remove message queue
-                        #del message_queues[s]
-
-            # Handle outputs
-            for s in writable:
-                if RequestManager.BUFFER_HTTP_TO_SSH != '':
-                    lockH.acquire()
-                    s.send(RequestManager.BUFFER_HTTP_TO_SSH)
-                    lockH.release()
