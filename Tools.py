@@ -8,6 +8,7 @@ import SocketServer
 import threading
 from multiprocessing import Lock
 
+# Semaphores pour BUFFERS de W
 lockH = Lock()  #La semaphore sur la ressource BUFFER_HTTP_TO_SHH
 lockS = Lock()  #La semaphore sur la ressource BUFFER_SSH_TO_HTTP
 class RequestManager :
@@ -18,14 +19,16 @@ class RequestManager :
     response = 'data'
     
     url_check_Eready = '/Father'
-    url_set_W_WaitOrder = '/OrderAndIWillObey'
-    url_set_W_HaveResult = '/FatherIGotYourAnswer'
+    url_set_W_WaitOrder = '/YourWillMyOrder'
+    url_set_W_HaveResult = '/FatherIGotSomething'
 
     E_isReady = False
     W_isReady = False
 
     W_still_Writing = False
     E_can_Read = False
+    W_can_Read = False
+    W_can_Write = False
     
     oK = 'OK'
     kO = 'KO'
@@ -35,7 +38,7 @@ class RequestManager :
 
     EOT = 'DEADBEEF'
     MAX_SIZE_GET = 255
-    MAX_SIZE_PAGE = 2048
+    MAX_SIZE_PAGE = 255
     
     BUFFER_SSH_TO_HTTP = ''
     BUFFER_HTTP_TO_SSH = ''
@@ -184,41 +187,44 @@ class W_Bot:
     PORT = 22
 
     @staticmethod
-    def beSlaveForEver():
+    def beSlaveForEver2():
         """
         This is our principal method which is charged to manage E requestsand open a SSH connection on W
         """
         while True:
             # On verifie si E est pret en SSH
+            print "[Slave2] : Checking E disponibility"
             while not RequestManager.E_isReady:
                 W_Bot.sleep()
-                print "E is not Ready"
+                #print "E is not Ready"
                 W_Bot.checkE_Ready()
             # Quand E est pret et que la connexion en SSH de W n'est pas encore ouverte on l'ouvre
             if RequestManager.E_isReady:
-                print "E is ready"
+                #print "E is ready"
                 #W_Bot.openSSH()
-                print "SSH OPENED on W"
+                #print "SSH OPENED on W"
                 RequestManager.W_isReady = True
             # Quand E et W sont prets en SSH on peut commencer la communication
-            if RequestManager.doesW_WaitingOrder():
-                print "E is ready on SSH, W too"
-                data = W_Bot.askData()
-
-                # Redemander le paquet tant qu'on en a pas recu un correct
-                while data == RequestManager.kO:
-                    W_Bot.sleep()
-                    data = W_Bot.askData()
-                #E est aussi pret ET a envoye une commande
-                if data != RequestManager.kO:                   
-                    #On ecrit notre data sur W_SSH
-                    lockH.acquire()
-                    RequestManager.BUFFER_HTTP_TO_SSH = data
-                    lockH.release()
-                    #result = W_Bot.execute(command)
-                    list_result = RequestManager.formatResult(data)
+            if RequestManager.W_isReady and RequestManager.E_isReady:
+                #print "E is ready on SSH, W too"
+            
+                print "[Slave2] : Both are available"
+                print "[Slave2] : Waiting to read BUFFER_SSH_TO_HTTP"
+                while not RequestManager.W_can_Write: 
+                    time.sleep(0.1)
+                # Si on peut interragir avec BUFFER_SSH_TO_HTTP
+                if RequestManager.W_can_Write:
+                    lockS.acquire()
+                    RequestManager.W_can_Write = False
+                    result = RequestManager.BUFFER_SSH_TO_HTTP
+                    RequestManager.BUFFER_SSH_TO_HTTP = ''
+                    lockS.release()
+                    print "\n[BUFFER_SSH_TO_HTTP] --> E\n", result
+                    list_result = RequestManager.formatResult(result)
+                    i =0
                     for string in list_result:
-                        print "==> "+string
+                        i = i+1
+                        #print "Part",i," ==> "+string
                         code = base64.b64encode(string)
                         url = W_Bot.BASE_URL+RequestManager.url_set_W_HaveResult+'?'+RequestManager.response+'='+code
                         state = RequestManager.request(url)
@@ -226,36 +232,47 @@ class W_Bot:
 
                     url = W_Bot.BASE_URL+RequestManager.url_set_W_HaveResult+'?'+RequestManager.response+'='+RequestManager.EOT
                     state = RequestManager.request(url)
-                    exit(0)
-
-
 
     @staticmethod
-    def execute(command):
+    def beSlaveForEver():
         """
-        Exec an command on W using the SSH_CLIENT
+        This is our principal method which is charged to manage E requestsand open a SSH connection on W
         """
-        cmd = base64.b64decode(command)
-        cmd = cmd.strip()
-        print"Commande a executer ==> "+cmd
-        stdin, stdout, stderr = W_Bot.SSH_CLIENT.exec_command(cmd)
-        data = stdout.read()
-        print "Result command =>"+data
-        return data
+        while True:
+            print "[Slave1] : Checking E disponibility"
+            # On verifie si E est pret en SSH
+            while not RequestManager.E_isReady:
+                W_Bot.sleep()
+                #print "E is not Ready"
+                W_Bot.checkE_Ready()
+            # Quand E est pret et que la connexion en SSH de W n'est pas encore ouverte on l'ouvre
+            if RequestManager.E_isReady:
+                #print "E is ready"
+                #W_Bot.openSSH()
+                #print "SSH OPENED on W"
+                RequestManager.W_isReady = True
+            # Quand E et W sont prets en SSH on peut commencer la communication
+            if RequestManager.doesW_WaitingOrder():
+                print "[Slave1] : Both are available"
+                #print "E is ready on SSH, W too"
+                print "[Slave1]"
+                data = W_Bot.askData()
 
-
-    @staticmethod
-    def openSSH():
-        """
-        Open an SSH connection on W localhost
-        W_Bot.SSH_CLIENT = paramiko.SSHClient()
-        W_Bot.SSH_CLIENT.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        W_Bot.SSH_CLIENT.connect('127.0.0.1', username='localuser', 
-            password='0irakboss')
-        """
-        
-        RequestManager.W_isReady = True
-
+                # Redemander le paquet tant qu'on en a pas recu un correct
+                while data == RequestManager.kO:
+                    W_Bot.sleep()
+                    print "[Slave1]"
+                    data = W_Bot.askData()
+                #E est aussi pret ET a envoye une donnee
+                if data != RequestManager.kO:                   
+                    #On ecrit notre data sur W_SSH
+                    lockH.acquire()
+                    RequestManager.W_can_Read = False
+                    RequestManager.BUFFER_HTTP_TO_SSH = base64.b64decode(data)
+                    print "\n[BUFFER_HTTP_TO_SSH] <-- E\n"
+                    print RequestManager.BUFFER_HTTP_TO_SSH
+                    RequestManager.W_can_Read = True
+                    lockH.release()
 
 
     @staticmethod

@@ -27,8 +27,12 @@ def main():
 
     http = W_Slave('HTTP Request Master', W_Bot.beSlaveForEver)
     http.start()
+
+    http2 = W_Slave('HTTP Sender Master', W_Bot.beSlaveForEver2)
+    http2.start()
+
     ssh = W_Slave('Slave W condamned to communicate', MySSHHandler.handle_W)
-   # ssh.start()
+    ssh.start()
     """
     ssh = ServJob('SSHServer', PORT2, MySSHHandler, 'Listening')
     ssh.start()
