@@ -1,16 +1,11 @@
 import time
 import select
 import socket
-import base64
 import urllib2
 import SocketServer
 import threading
 from multiprocessing import Lock
 
-# Semaphores pour BUFFERS de W
-lockH = Lock()  #La semaphore sur la ressource BUFFER_HTTP_TO_SHH
-lockS = Lock()  #La semaphore sur la ressource BUFFER_SSH_TO_HTTP
-TIME_TO_WAIT = 5
 class RequestManager :
     """
     Class with static methods and attribute which help manage request
@@ -34,7 +29,8 @@ class RequestManager :
     MAX_SIZE_PAGE = 4096 
     BUFFER_SSH_TO_HTTP = ''
     BUFFER_HTTP_TO_SSH = ''
-
+    AVAILABLE = False
+    BASE_URL = ''
     @staticmethod
     def doesSSHReady_E():
         """
@@ -99,7 +95,7 @@ class RequestManager :
         """
         Send our result by POST method
         """
-        the_url = W_Bot.BASE_URL+RequestManager.url_set_W_HaveResult
+        the_url = RequestManager.BASE_URL+RequestManager.url_set_W_HaveResult
         #print "[", requester,"] (Sending Result) to ",the_url
         ret = RequestManager.kO
         try:
@@ -141,121 +137,17 @@ class W_Slave(threading.Thread):
     Help us to launch W-P html interractions and ssh things as a Job
     ----------------------------------------------
     """
-    def __init__(self, nom, handler, action='Running'):
+    def __init__(self, nom, handler,url, action='Running'):
         threading.Thread.__init__(self) 
         self.nom = nom 
         self.action = action
         self.handler = handler
+        self.url = url
 
     def run(self):
-        print time.asctime(), ' ::: '+self.action+' '+self.nom.__str__()+' to reach '+W_Bot.BASE_URL+'....'
+        print time.asctime(), ' ::: '+self.action+' '+self.nom.__str__()+' to reach '+self.url+'....'
         self.handler()
         print time.asctime()
-
-
-
-
-class W_Bot:
-    """
-    ----------------------------------------------
-    Help us to lauch W functions
-    ----------------------------------------------
-    """
-    TIME_TO_WAIT = 0.1
-    BASE_URL = ''
-    PORT = 22
-
-    @staticmethod
-    def beSlaveForEver2():
-        """
-        Send content of the socket W on HTTP E
-        """
-        while True:
-            # On verifie si E est pret en SSH
-            requester = "Slave2" 
-            #print "[",requester,"] : Checking E disponibility"
-            while not RequestManager.E_isReady:
-                W_Bot.sleep()
-                W_Bot.checkE_Ready(requester)
-            # Quand E est pret et que la connexion en SSH de W n'est pas encore ouverte on l'ouvre
-            if RequestManager.E_isReady:
-                RequestManager.W_isReady = True
-            # Quand E et W sont prets en SSH on peut commencer la communication
-            if RequestManager.W_isReady and RequestManager.E_isReady:
-                #print "[",requester,"] : Both are available"
-                #print "[",requester,"] : Waiting to read BUFFER_SSH_TO_HTTP"
-                while not RequestManager.W_can_Write: 
-                    time.sleep(0.1)
-                if RequestManager.W_can_Write:
-                    lockS.acquire()
-                    RequestManager.W_can_Write = False
-                    result = RequestManager.BUFFER_SSH_TO_HTTP
-                    RequestManager.BUFFER_SSH_TO_HTTP = ''
-                    lockS.release()
-                    #print "\n[BUFFER_SSH_TO_HTTP] --> E\n", result
-                    RequestManager.sendResult(base64.b64encode(result), requester)
-
-
-    @staticmethod
-    def beSlaveForEver():
-        """
-        Ask data to E
-        """
-        while True:
-            requester = "Slave1" 
-            #print "[",requester,"] : Checking E disponibility"
-            # On verifie si E est pret en SSH
-            while not RequestManager.E_isReady:
-                W_Bot.sleep()
-                W_Bot.checkE_Ready(requester)
-            # Quand E est pret et que la connexion en SSH de W n'est pas encore ouverte on l'ouvre
-            if RequestManager.E_isReady:
-                RequestManager.W_isReady = True
-            # Quand E et W sont prets en SSH on peut commencer la communication
-            if RequestManager.doesW_WaitingOrder():
-                #print "[",requester,"] : Both are available"
-                #print "E is ready on SSH, W too"
-                data = W_Bot.askData(requester)
-                # Redemander le paquet tant qu'on en a pas recu un correct
-                while data == RequestManager.kO:
-                    W_Bot.sleep()
-                    data = W_Bot.askData(requester)
-                #E est aussi pret ET a envoye une donnee
-                if data != RequestManager.kO:                   
-                    #On ecrit notre data sur W_SSH
-                    lockH.acquire()
-                    RequestManager.W_can_Read = False
-                    RequestManager.BUFFER_HTTP_TO_SSH = base64.b64decode(data)
-                    #print "\n[BUFFER_HTTP_TO_SSH] <-- E\n"
-                    #print RequestManager.BUFFER_HTTP_TO_SSH
-                    RequestManager.W_can_Read = True
-                    lockH.release()
-
-
-    @staticmethod
-    def sleep(sl = TIME_TO_WAIT):
-        time.sleep(sl)
-
-
-
-    @staticmethod
-    def checkE_Ready(requester):
-        """
-        check if E has a client on SSH
-        """
-        RequestManager.E_isReady = False
-        url = W_Bot.BASE_URL+RequestManager.url_check_Eready
-        if RequestManager.request(url, requester) == RequestManager.oK:
-            RequestManager.E_isReady = True;
-
-
-    @staticmethod
-    def askData(requester):
-        """
-        Ask a data to E
-        """
-        return RequestManager.request(W_Bot.BASE_URL+RequestManager.url_set_W_WaitOrder, requester)
-
 
 
 
@@ -294,3 +186,4 @@ class SockListenerJob(ServJob):
         inputs = [ server ]
         outputs = [ ]
         self.handler(inputs, outputs, server)
+
