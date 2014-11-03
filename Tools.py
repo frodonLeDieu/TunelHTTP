@@ -31,6 +31,8 @@ class RequestManager :
     BUFFER_HTTP_TO_SSH = ''
     AVAILABLE = False
     BASE_URL = ''
+    PROXY = ''
+
     @staticmethod
     def doesSSHReady_E():
         """
@@ -81,8 +83,15 @@ class RequestManager :
         result = RequestManager.kO
         try:
             request = urllib2.Request(url)
-            connexion = urllib2.urlopen(request)
-            result = connexion.readline()
+            if RequestManager.PROXY != '':
+                proxy = urllib2.ProxyHandler({'http': 'http://192.168.12.107:3128/'})
+                opener = urllib2.build_opener(proxy)
+                urllib2.install_opener(opener)
+                #print"Requester using PROXY ",RequestManager.PROXY
+
+
+            handle = urllib2.urlopen(req)
+            result = handle.readline()
             result = RequestManager.getClearData(result)
         except:
             pass     
@@ -100,7 +109,11 @@ class RequestManager :
         ret = RequestManager.kO
         try:
             req = urllib2.Request(the_url, result)
-            handle = urllib2.urlopen(req)
+            if RequestManager.PROXY != '':
+                handle = urllib2.urlopen(req, proxies={'http':RequestManager.PROXY})
+            else:    
+                handle = urllib2.urlopen(req)
+
             result = handle.read()
             result = RequestManager.getClearData(result)
         except:
@@ -150,6 +163,23 @@ class W_Slave(threading.Thread):
         print time.asctime()
 
 
+class SimpleServer( SocketServer.ThreadingMixIn, SocketServer.TCPServer):
+    # Ctrl-C will cleanly kill all spawned threads
+    daemon_threads = True
+    # much faster rebinding
+    allow_reuse_address = True
+
+    def __init__( self, server_address, RequestHandlerClass):
+        SocketServer.TCPServer.__init__( self, server_address, RequestHandlerClass)
+
+    def serve_forever( self):
+        print"MON SERVE_FOREVER"
+        while True:
+            try:
+                self.handle_request() 
+            except Exception: 
+                print"Interruption"
+
 
 class ServJob(threading.Thread): 
     """
@@ -167,7 +197,10 @@ class ServJob(threading.Thread):
     def run(self):
         print time.asctime(), ' ::: '+self.action+' '+self.nom.__str__()+' at port '+self.port.__str__()+' ......'
         serv = SocketServer.TCPServer(('', self.port), self.handler)
-        serv.serve_forever()
+        try:
+            serv.serve_forever()
+        except Exception: 
+            print"Interruption"
 
 
 

@@ -26,6 +26,7 @@ class E_Bot(SimpleHTTPServer.SimpleHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-type", cType)
         self.send_header("Content-length", size.__str__())
+        self.send_header("Cache-Control", "no-cache")
         self.end_headers()
     
 

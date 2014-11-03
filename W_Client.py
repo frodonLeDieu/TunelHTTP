@@ -209,7 +209,7 @@ class W_Bot:
 
 
 def usage():
-    print'python W_Client port_ssh port_http url_server_en_http [time_between_each_request]'
+    print'python W_Client port_ssh port_http url_server_en_http [proxy]'
     exit(0)
 
 
@@ -220,7 +220,13 @@ def main():
     PORT = int(sys.argv[1])
     PORT2 = int(sys.argv[2])
     BASE_URL = sys.argv[3]
-    W_Bot.PORT = PORT    
+    
+    if( len( sys.argv) > 4):
+        PROXY = sys.argv[4]
+        RequestManager.PROXY = PROXY
+        print "Using Proxy located at ", PROXY
+        
+    W_Bot.PORT = PORT  
     W_Bot.BASE_URL = RequestManager.BASE_URL = BASE_URL+':'+PORT2.__str__()
     http = W_Slave('HTTP Request Master', W_Bot.requestSender, W_Bot.BASE_URL)
     http.start()
