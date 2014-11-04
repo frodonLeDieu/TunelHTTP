@@ -121,7 +121,7 @@ class W_Bot:
         while True:  
             W_Bot.checkE_Ready()
             if inputs == [] :
-                print "NEW CONNECTION"
+                #print "NEW CONNECTION"
                 server.connect(('localhost', 22))
                 inputs = [ server ]
                 outputs = [ ] 
@@ -135,10 +135,10 @@ class W_Bot:
                         # On a des donnees en retour
                         data = RequestManager.receive(s, RequestManager.MAX_SIZE_PAGE)
                         if data : 
-                            print "-----------------------------"
-                            print "SSH LINE OUT"
-                            print "-----------------------------"
-                            print data
+                            #print "-----------------------------"
+                            #print "SSH LINE OUT"
+                            #print "-----------------------------"
+                            #print data
                             lockS.acquire()
                             RequestManager.W_can_Write = False
                             RequestManager.BUFFER_SSH_TO_HTTP += data
@@ -150,7 +150,7 @@ class W_Bot:
                             # Si W peut lire BUFFER_HTTP_TO_SSH
                         else:
                             inputs = []
-                            print "E is dead"
+                            #print "E is dead"
                             server.close()
                             RequestManager.AVAILABLE = False
 
@@ -169,12 +169,12 @@ class W_Bot:
                         lockH.release()
                         if not RequestManager.E_isReady:
                             inputs = []
-                            print "E is dead"
+                            #print "E is dead"
                             server.close()
                             RequestManager.AVAILABLE = False
         else:
             #Fermer la connection
-            print "E is dead"
+            #print "E is dead"
             inputs = [ ]
             server.close()
             RequestManager.AVAILABLE = False
