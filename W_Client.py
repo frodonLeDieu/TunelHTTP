@@ -109,7 +109,7 @@ class W_Bot:
                             server.close()
         else:
             #Fermer la connection
-            inputs = [ ]
+            inputs = []
             server.close()
 
 
@@ -142,10 +142,14 @@ def usage():
 
 
 def main():
-    if(len(sys.argv) < 4):
+    if(len(sys.argv) < 3):
         usage()
     PORT = int(sys.argv[1])
     BASE_URL = sys.argv[2]
+
+    if(len(sys.argv) > 3):
+        RequestManager.PROXY = str(sys.argv[3])
+
     W_Bot.BASE_URL = RequestManager.BASE_URL = BASE_URL+':'+PORT.__str__()
     
     http = W_Slave('HTTP Request Sender', W_Bot.requestSender)

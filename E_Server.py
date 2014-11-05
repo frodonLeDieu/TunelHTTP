@@ -1,6 +1,7 @@
 import sys
 from Tools import RequestManager, ServJob, SockListenerJob
 import select
+import urllib
 import socket
 import sys
 import time
@@ -28,7 +29,6 @@ class E_Bot(SimpleHTTPServer.SimpleHTTPRequestHandler):
         self.send_header("Content-type", cType)
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Content-length", size.__str__())
-        self.send_header("Cache-Control", "no-cache")
         self.end_headers()
     
     def answerToClient(self, html, code, cType):
@@ -47,6 +47,8 @@ class E_Bot(SimpleHTTPServer.SimpleHTTPRequestHandler):
             if req == RequestManager.url_set_W_HaveResult:
                 content_len = int(self.headers.getheader('content-length', 0))
                 result = self.rfile.read( content_len)
+                #result2 = urllib.urldecode(result)
+                #data = result2.Data
                 if RequestManager.E_isReady:
                     lockH.acquire()
                     RequestManager.E_can_Read = False

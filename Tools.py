@@ -2,6 +2,7 @@ import time
 import select
 import socket
 import urllib2
+import urllib
 import SocketServer
 import threading
 from random import choice
@@ -62,13 +63,17 @@ class RequestManager :
     def request(url, requester):
         """ Conncect to url and return the response """
         result = RequestManager.kO
-        try:
-            request = urllib2.Request(url)
-            connexion = urllib2.urlopen(request)
-            result = connexion.readline()
-            result = RequestManager.getClearData(result)
-        except:
-            pass     
+        ua = choice(RequestManager.USER_AGENTS) 
+        request = urllib2.Request(url)
+        request.add_header("User-agent", "Mozilla/5.0")
+        request.add_header("User-agent", ua)
+        if RequestManager.PROXY != '':
+            proxy  = urllib2.ProxyHandler({'http': RequestManager.PROXY})
+            opener = urllib2.build_opener(proxy)
+            urllib2.install_opener(opener)
+        connexion = urllib2.urlopen(request)
+        result = connexion.readline()
+        result = RequestManager.getClearData(result)
         return result
 
 
@@ -76,16 +81,25 @@ class RequestManager :
     def sendResult(result, requester):
         """ Send our result by POST method """
         the_url = RequestManager.BASE_URL+RequestManager.url_set_W_HaveResult
-        #print "[", requester,"] (Sending Result) to ",the_url
         ret = RequestManager.kO
-        try:
-            req = urllib2.Request(the_url, result)
-            handle = urllib2.urlopen(req)
-            result = handle.read()
-            result = RequestManager.getClearData(result)
-        except:
-            pass     
-        #print "[", requester,"] (Answer) => ",result
+        ua = choice(RequestManager.USER_AGENTS) 
+
+        #parameters = {'Data' : result}
+        #result = urllib.urlencode(parameters) 
+        req = urllib2.Request(the_url, result)
+
+        #req.add_header("User-agent", ua)
+        req.add_header("User-agent", "Mozilla/5.0")
+        #req.add_header("Content-Length", str(len(parameters)))
+
+        if RequestManager.PROXY != '':
+            proxy  = urllib2.ProxyHandler({'http': RequestManager.PROXY})
+            opener = urllib2.build_opener(proxy)
+            urllib2.install_opener(opener)
+
+        handle = urllib2.urlopen(req)
+        result = handle.read()
+        result = RequestManager.getClearData(result)
         return ret
 
 
@@ -119,7 +133,6 @@ class W_Slave(threading.Thread):
         print time.asctime(), ' ::: '+str(self.action)+' '+self.nom.__str__()
 
     def run(self):
-        print time.asctime(), ' ::: '+self.action+' '+self.nom.__str__()+' to reach '+self.url+'....'
         self.handler()
         print time.asctime()
 
@@ -132,7 +145,6 @@ class ServJob(W_Slave):
 
 
     def run(self):
-        print time.asctime(), ' ::: '+self.action+' '+self.nom.__str__()+' at port '+self.port.__str__()+' ......'
         serv = SocketServer.TCPServer(('', self.port), self.handler)
         serv.serve_forever()
 
@@ -145,8 +157,7 @@ class SockListenerJob(ServJob):
         server.setblocking(0)
         server_address = ('localhost', self.port)
         server.bind(server_address)
-        print time.asctime(), ' ::: '+self.action+' '+self.nom.__str__()+' at port '+self.port.__str__()+' ......'
-        inputs = [ server ]
+        inputs = [server ]
         outputs = [ ]
         self.handler(inputs, outputs, server)
 
