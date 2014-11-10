@@ -8,6 +8,7 @@ import threading
 from random import choice
 from multiprocessing import Lock
 
+liste_alea = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','0','1','2','3','4','5','6','7','8','9']
 class RequestManager :
     """ Class with static methods and attribute which help manage request """
     response = 'data'
@@ -31,6 +32,7 @@ class RequestManager :
     BUFFER_HTTP_TO_SSH = ''
     AVAILABLE = False
     BASE_URL = ''
+    PROXY =''
     USER_AGENTS = ['Mozilla/5.0 (Windows; U; Windows NT 5.1; it; rv:1.8.1.11) Gecko/20071127 Firefox/2.0.0.11', 'Opera/9.25 (Windows NT 5.1; U; en)', 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1; .NET CLR 1.1.4322; .NET CLR 2.0.50727)', 'Mozilla/5.0 (compatible; Konqueror/3.5; Linux) KHTML/3.5.5 (like Gecko) (Kubuntu)', 'Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8.0.12) Gecko/20070731 Ubuntu/dapper-security Firefox/1.5.0.12', 'Lynx/2.8.5rel.1 libwww-FM/2.14 SSL-MM/1.4.1 GNUTLS/1.2.9']
 
     @staticmethod
@@ -60,17 +62,45 @@ class RequestManager :
         return strr.replace(RequestManager.HTML_SUFFIX, '')
 
     @staticmethod
+    def applyProxy():
+        proxy  = urllib2.ProxyHandler({'http': RequestManager.PROXY})
+        opener = urllib2.build_opener(proxy)
+        urllib2.install_opener(opener)
+
+    
+    @staticmethod
+    def chunkUrl(url):
+        global liste_alea
+        a = choice(liste_alea)
+        b = choice(liste_alea)
+        c = choice(liste_alea)
+        d = choice(liste_alea)
+        e = choice(liste_alea)
+        f = choice(liste_alea)
+        g = choice(liste_alea)
+        h = choice(liste_alea)
+        i = choice(liste_alea)
+        j = choice(liste_alea)
+        k = choice(liste_alea)
+        l = choice(liste_alea)
+        m = choice(liste_alea)
+        n = choice(liste_alea)
+        o = choice(liste_alea)
+        p = choice(liste_alea)
+        tmp = a+b+c+d+e+f+g+h+i+j+m+n+o+p+d+g+a+h+j+i+k+l+m+i+h+d+e+c+i+p+a+j+j+j+j+j+k+l+m+o+p
+        return url+tmp
+    @staticmethod
     def request(url, requester):
         """ Conncect to url and return the response """
         result = RequestManager.kO
         ua = choice(RequestManager.USER_AGENTS) 
-        request = urllib2.Request(url)
-        request.add_header("User-agent", "Mozilla/5.0")
+        request = urllib2.Request(RequestManager.chunkUrl(url))
         request.add_header("User-agent", ua)
+        request.add_header("Cache-Control", "max-age=0")
+        request.add_header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        request.add_header("Connection", "keep-alive")
         if RequestManager.PROXY != '':
-            proxy  = urllib2.ProxyHandler({'http': RequestManager.PROXY})
-            opener = urllib2.build_opener(proxy)
-            urllib2.install_opener(opener)
+            RequestManager.applyProxy()
         connexion = urllib2.urlopen(request)
         result = connexion.readline()
         result = RequestManager.getClearData(result)
@@ -81,22 +111,25 @@ class RequestManager :
     def sendResult(result, requester):
         """ Send our result by POST method """
         the_url = RequestManager.BASE_URL+RequestManager.url_set_W_HaveResult
+        the_url = RequestManager.chunkUrl(the_url)
         ret = RequestManager.kO
         ua = choice(RequestManager.USER_AGENTS) 
-
-        #parameters = {'Data' : result}
+        parameters = {'Data' : str(result) }
         #result = urllib.urlencode(parameters) 
-        req = urllib2.Request(the_url, result)
-
-        #req.add_header("User-agent", ua)
-        req.add_header("User-agent", "Mozilla/5.0")
-        #req.add_header("Content-Length", str(len(parameters)))
-
+        result = urllib.urlencode(parameters) 
+        size = len(result)    
+        headers = {
+            'Host' : 'FrodonHome',
+            'Connection' : 'keep-alive',
+            'User-agent' : ua,
+            'Content-type' : 'application/x-www-form-urlencoded;',
+            'Accept' : '*/*'
+        }
+        req = urllib2.Request(the_url, result, headers)
+        #print result
+        #req = urllib2.Request(the_url, RequestManager.cesar_all(result, 7), headers)
         if RequestManager.PROXY != '':
-            proxy  = urllib2.ProxyHandler({'http': RequestManager.PROXY})
-            opener = urllib2.build_opener(proxy)
-            urllib2.install_opener(opener)
-
+            RequestManager.applyProxy()
         handle = urllib2.urlopen(req)
         result = handle.read()
         result = RequestManager.getClearData(result)
@@ -120,7 +153,22 @@ class RequestManager :
                 _hasData = False
         return buf
 
+    @staticmethod
+    def cesar_all(string, decalage):
+        res = ''
+        for char in string:
+            res += RequestManager.cesar(char, decalage)
+            return res
 
+    @staticmethod
+    def cesar(char, decalage):
+        min_list = 'abcdefghijklmnopqrstuvwxyz'
+        maj_list = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        if char in min_list:
+            return min_list[(min_list.index(char)+decalage)%26]
+        if char in maj_list:
+            return maj_list[(maj_list.index(char)+decalage)%26]
+        return char
 
 
 class W_Slave(threading.Thread): 

@@ -179,16 +179,13 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         params = urllib.urlencode(req.getParams(HTTPRequest.METHOD_POST))
         if not self.doRequest(conn, "POST", req.getPath(), params, req.headers): 
             return ''
-        # Delegate response to plugin
         res = self._getresponse(conn)
-        print res
-        res.url = req.getPath()
-        #Dropping result when the req or res need to be dropped
-        """
-        if req.drop or res.drop:
-            print("Dropping request : ")
-            print(req)
-        """
+        if not res is  None:
+            res.url = req.getPath()
+            #Dropping result when the req or res need to be dropped
+            if req.drop or res.drop:
+                print("Dropping request : ")
+                print(req)
         #Delegate response to plugin
         res = ProxyPlugin.delegate(ProxyPlugin.EVENT_MANGLE_RESPONSE, res.clone())
         data = res.serialize()

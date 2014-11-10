@@ -44,11 +44,21 @@ class E_Bot(SimpleHTTPServer.SimpleHTTPRequestHandler):
     def do_POST(self):
         req = self.path
         if RequestManager.E_isReady:
-            if req == RequestManager.url_set_W_HaveResult:
-                content_len = int(self.headers.getheader('content-length', 0))
-                result = self.rfile.read( content_len)
-                #result2 = urllib.urldecode(result)
-                #data = result2.Data
+            if RequestManager.url_set_W_HaveResult in req:
+                content_len = int(self.headers.getheader('Content-Length', 0))
+                content_len_str = self.headers.getheader('Content-Length', 0)
+                result = self.rfile.read(content_len)
+                #result = RequestManager.cesar_all(result, -7)
+                #print result
+                result = result.replace("%3D", "=")
+                result = result.replace("%3A", ":")
+                result = result.replace("%3C", "<")
+                result = result.replace("%3E", ">")
+                result = result.replace("%3F", "?")
+                result = result.replace("%2B", "+")
+                result = result.replace("%2D", "-")
+                result = result.replace("%2F", "/")
+                result = result.replace("Data=", "")
                 if RequestManager.E_isReady:
                     lockH.acquire()
                     RequestManager.E_can_Read = False
@@ -73,14 +83,14 @@ class E_Bot(SimpleHTTPServer.SimpleHTTPRequestHandler):
         Our Get implementation which handles all get requests
         """
         req = self.path
-        if req == RequestManager.url_check_Eready:
+        if RequestManager.url_check_Eready in req:
             if RequestManager.E_isReady:
                 res = RequestManager.oK
             else:
                 res = RequestManager.kO
             html = RequestManager.convertData(res)
             self.answerToClient(html, 200, 'text/html')
-        elif req == RequestManager.url_set_W_WaitOrder:
+        elif RequestManager.url_set_W_WaitOrder in req:
             RequestManager.W_isReady = True
             if RequestManager.doesW_WaitingOrder():
                 if RequestManager.BUFFER_SSH_TO_HTTP != '':
@@ -113,7 +123,7 @@ class E_Bot(SimpleHTTPServer.SimpleHTTPRequestHandler):
             inputready,outputready,exceptready = select.select(inputt,inputt,[])
             for s in inputready:
                 if s is server:
-                    #print "New client on E_SSH via select"
+                    print "New client on E_SSH via select"
                     client, address = server.accept()
                     inputt.append(client)
                     RequestManager.E_isReady = True
